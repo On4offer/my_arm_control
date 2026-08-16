@@ -49,10 +49,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from my_arm_control.motion import TrapezoidalProfile
 from my_arm_control.protocol import ADDR, DEFAULT_BAUDRATE, FeetechSerialBus, ProtocolError, counts_to_angle, decode_sign_magnitude, encode_sign_magnitude
 
 POLL_MS = 100          # 状态刷新周期（10Hz）
 WRITE_MIN_INTERVAL = 0.03  # 滑块连续写 Goal 的最小间隔（秒），防刷爆串口
+HOME_VMAX = 150.0      # 回安全位姿最大速度（码/秒）
+HOME_AMAX = 300.0      # 回安全位姿最大加速度（码/秒²）
 
 
 class ServoDashboard(QMainWindow):
@@ -67,6 +70,7 @@ class ServoDashboard(QMainWindow):
         self.control_enabled = False   # 控制模式门控（默认关闭）
         self.servo_rows: dict[int, dict] = {}   # sid -> {chk, slider, spin, deg, state}
         self._last_write: dict[int, float] = {}
+        self._home = None  # 回安全位姿状态: {prof: sid->TrapezoidalProfile, t, T}
 
         self._build_ui()
         self.timer = QTimer(self)
@@ -100,6 +104,10 @@ class ServoDashboard(QMainWindow):
         self.chk_control.setToolTip("开启后滑块才允许写 Goal_Position（安全门控）")
         self.chk_control.stateChanged.connect(self._on_control_mode)
         top.addWidget(self.chk_control)
+        self.btn_home = QPushButton("回安全位姿")
+        self.btn_home.setToolTip("把所有关节平滑移动到量程中点（重力最平衡），避免近限位过载")
+        self.btn_home.clicked.connect(self._home_safe)
+        top.addWidget(self.btn_home)
         self.btn_estop = QPushButton("急停")
         self.btn_estop.setStyleSheet("background:#d33;color:#fff;font-weight:bold;padding:4px 16px;")
         self.btn_estop.clicked.connect(self._estop)
@@ -261,10 +269,45 @@ class ServoDashboard(QMainWindow):
         try:
             self.bus.write_u16(sid, ADDR["goal_position"][0], encode_sign_magnitude(row["slider"].value()))
         except ProtocolError as e:
-            self._log(f"ID={sid} 写 Goal 失败: {e}")
+            self._log(f"ID={sid} 写 Goal 失败: {e}（0x20=过载报警，锁存需断电重启清除；先点[回安全位姿]）")
+
+    def _home_safe(self):
+        """把全部关节平滑移到量程中点（重力最平衡的安全位姿）。
+
+        用 QTimer 步进驱动（与轮询同一线程），避免阻塞 UI；急停可随时打断。
+        """
+        if self.bus is None:
+            self._log("未连接，无法回安全位姿")
+            return
+        if self._home is not None:
+            self._log("正在回安全位姿中，请等待")
+            return
+        self.chk_control.setChecked(False)  # 强制退出控制模式，避免与滑块写冲突
+        try:
+            present = {}
+            for sid in self.servo_rows:
+                present[sid] = decode_sign_magnitude(self.bus.read_u16(sid, ADDR["present_position"][0]))
+        except ProtocolError as e:
+            self._log(f"读取当前位置失败，无法回安全位姿: {e}")
+            return
+        profs = {}
+        for sid, row in self.servo_rows.items():
+            mid = float(row["lo"] + row["hi"]) / 2.0
+            profs[sid] = TrapezoidalProfile(present[sid], mid, HOME_VMAX, HOME_AMAX)
+        self._home = {"prof": profs, "t": 0.0, "T": max(p.T for p in profs.values())}
+        # 使能所有力矩后开始步进（在 _poll_once 中逐帧下发）
+        for sid in self.servo_rows:
+            try:
+                self.bus.write_u8(sid, ADDR["torque_enable"][0], 1)
+            except ProtocolError:
+                pass
+        self.btn_home.setEnabled(False)
+        self._log(f"回安全位姿（量程中点）... 预计 {self._home['T']:.1f}s")
 
     def _estop(self):
-        """急停：全部失能 + 关闭控制模式。"""
+        """急停：全部失能 + 关闭控制模式 + 中止回安全位姿。"""
+        self._home = None  # 中止回中步进
+        self.btn_home.setEnabled(True)
         self.chk_control.setChecked(False)
         if self.bus is not None:
             for sid in self.servo_rows:
@@ -273,12 +316,32 @@ class ServoDashboard(QMainWindow):
                 except ProtocolError:
                     pass
         self._log("⚠ 急停：所有舵机失能")
-        self.setStyleSheet("")  # 复位样式（若之前标红）
 
     # ----------------------------------------------------------- 轮询刷新
+    def _home_step(self):
+        """回安全位姿的一帧：按轨迹下发 Goal，推进时间，完成后收尾。"""
+        home = self._home
+        t = home["t"]
+        for sid, prof in home["prof"].items():
+            goal = int(round(prof.position(t)))
+            try:
+                self.bus.write_u16(sid, ADDR["goal_position"][0], encode_sign_magnitude(goal))
+            except ProtocolError as e:
+                self._log(f"ID={sid} 回中写 Goal 失败: {e}（过载锁存则需断电重启）")
+        t += POLL_MS / 1000.0
+        if t >= home["T"]:
+            self._home = None
+            self.btn_home.setEnabled(True)
+            self._log("已回到安全位姿（量程中点）✅")
+        else:
+            home["t"] = t
+
     def _poll_once(self):
         if self.bus is None:
             return
+        # 回安全位姿步进：逐帧下发各关节 Goal_Position
+        if self._home is not None:
+            self._home_step()
         for sid, row in self.servo_rows.items():
             st = {}
             try:
