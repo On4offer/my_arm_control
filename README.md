@@ -18,7 +18,8 @@ my_arm_control/
 ├── demos/                   # 可执行 Demo（含 sys.path 引导，可直接运行）
 │   ├── d1_scan_and_move.py  #   D1：搜索总线 → 识别 ID → 1 号舵机转 30°
 │   ├── d2_smooth_move.py    #   D2：多关节梯形速度规划平滑运动，记录轨迹 CSV
-│   └── d2_wave_demo.py      #   D2（录视频用）：多关节交替摆动波浪运动
+│   ├── d2_wave_demo.py      #   D2（录视频用）：多关节交替摆动波浪运动
+│   └── d3_servo_dashboard.py#   D3：舵机调试上位机（PySide6/Qt，实时监控+单关节控制）
 ├── tests/                   # 离线单测（无需硬件）
 │   ├── test_protocol.py     #   10 项：帧构造/解析/校验/编解码
 │   └── test_motion.py       #   8 项：轨迹规划数学/限幅
@@ -63,6 +64,11 @@ python demos/d2_smooth_move.py --port COM3 --dry-run          # 只读状态
 # 3b. D2 波浪运动（录视频用）：多关节交替摆动，--center mid 保证 6 关节全幅
 python demos/d2_wave_demo.py --port COM3 --center mid
 
+# 3c. D3 舵机调试上位机（PySide6/Qt）：实时状态面板 + 单关节滑块控制
+python demos/d3_servo_dashboard.py                 # 打开窗口，下拉选端口连接
+python demos/d3_servo_dashboard.py --port COM3     # 指定端口自动连接
+python demos/d3_servo_dashboard.py --smoke         # 冒烟自检（不连硬件）
+
 # 4. 自定义：2 号舵机反向转 45°，2 秒平滑（D1）
 python demos/d1_scan_and_move.py --port COM3 --servo 2 --angle -45 --duration-ms 2000
 ```
@@ -81,6 +87,22 @@ python demos/d1_scan_and_move.py --port COM3 --servo 2 --angle -45 --duration-ms
 **真机要点**（2026-08-16 主臂 COM22）：
 - 6 关节同步梯形规划运动成功，轨迹记录 CSV（time/t_real/goal/present）
 - 过载防护：目标默认距限位 ≥150 码（≈13°）安全余量；过载报警位 0x20 需断电清除
+
+## D3 舵机调试上位机
+
+**技术栈**：PySide6（Qt6，工业上位机/示教器主流）；依赖 `pip install PySide6`（2026-08-16 已装）。
+
+**功能**（`demos/d3_servo_dashboard.py`）：
+- 实时状态表：6 舵机 位置(码/角度)/电压/温度/错误位/限位，QTimer 10Hz 刷新
+- 单关节控制：滑块+数值框写 Goal_Position，范围锁定限位；每关节独立使能/失能
+- 安全设计：控制模式门控（默认关闭）、红色急停（全部失能）
+
+**架构（可面试讲解）**：
+- 信号槽：滑块 `valueChanged` → 写舵机；按钮 `clicked` → 连接/急停
+- 事件循环 + QTimer 周期轮询串口，单线程串行访问串口（无并发竞态）
+- UI 状态与串口状态解耦（控制模式 + 每关节使能双门控）
+
+> 真机验证：2026-08-16 连接主臂 COM22 轮询稳定无崩溃；`--smoke` 冒烟自检通过。
 
 ## D1 验收状态
 
