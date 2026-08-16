@@ -13,8 +13,11 @@ SO-ARM101（幻尔主从双臂，HX 舵机，兼容 Feetech STS3215）的**完�
 ```
 my_arm_control/
 ├── protocol.py             # 手搓 Feetech 协议层（帧构造/解析/校验/扫描）
+├── motion.py               # 手搓运动控制层（D2）：梯形速度规划/缓动 + 限位限幅 + 多关节下发
 ├── d1_scan_and_move.py     # D1 Demo：搜索总线 → 识别 ID → 1 号舵机转 30°
-└── test_protocol.py        # 离线单测（无需硬件）
+├── d2_smooth_move.py       # D2 Demo：多关节梯形速度规划平滑运动，记录轨迹 CSV
+├── test_protocol.py        # D1 离线单测（无需硬件）
+└── test_motion.py          # D2 离线单测（无需硬件）
 ```
 
 ## 协议要点（对照阅读 LeRobot `src/lerobot/motors/feetech/`）
@@ -37,13 +40,32 @@ my_arm_control/
 ```bash
 # 1. 离线单测（无需硬件）
 python test_protocol.py
+python test_motion.py
 
-# 2. 真机 Demo：搜索总线 + 1 号舵机转 30°
+# 2. 真机 Demo D1：搜索总线 + 1 号舵机转 30°
 python d1_scan_and_move.py --port COM3
 
-# 3. 自定义：2 号舵机反向转 45°，2 秒平滑
+# 3. 真机 Demo D2：多关节梯形速度规划平滑运动（相对角度，度）
+python d2_smooth_move.py --port COM3 --target "20,10,-20,15,10,10"
+python d2_smooth_move.py --port COM3 --target "20,10,-20,15,10,10" --profile linear --duration-ms 2000
+python d2_smooth_move.py --port COM3 --dry-run          # 只读状态
+
+# 4. 自定义：2 号舵机反向转 45°，2 秒平滑（D1）
 python d1_scan_and_move.py --port COM3 --servo 2 --angle -45 --duration-ms 2000
 ```
+
+## D2 运动控制层
+
+**实现**（`motion.py`，对照 LeRobot v0.6.2）：
+- `TrapezoidalProfile`：梯形速度规划（加速-匀速-减速三段，距离不足自动退化为三角形剖面）
+- `LinearProfile` / `EaseProfile`：线性插值（对照 `control_utils.follower_smooth_move_to`）/ sine 缓动
+- `clamp_relative`：逐帧增量限幅（对照 `robots/utils.ensure_safe_goal_position` 的 max_relative_target）
+- `ArmController`：按 fps 下发多关节 Goal_Position，目标截断到限位 ± 安全余量，含到位稳定期
+- 位置闭环由舵机内部 PID（P/D/I 寄存器 21/22/23）完成
+
+**真机要点**（2026-08-16 主臂 COM22）：
+- 6 关节同步梯形规划运动成功，轨迹记录 CSV（time/t_real/goal/present）
+- 过载防护：目标默认距限位 ≥150 码（≈13°）安全余量；过载报警位 0x20 需断电清除
 
 ## D1 验收状态
 
