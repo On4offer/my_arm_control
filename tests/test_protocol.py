@@ -8,7 +8,13 @@ D1 协议层离线单测：无需硬件，验证帧构造、解析、校验和�
   pytest test_protocol.py        # 或 pytest 方式
 """
 
-from protocol import (
+import sys
+from pathlib import Path
+
+# 把项目根目录加入 sys.path，使 my_arm_control 包可直接导入（无需 pip install）
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from my_arm_control.protocol import (
     BROADCAST_ID,
     INST_PING,
     INST_READ,

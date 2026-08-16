@@ -8,7 +8,7 @@ venv/
 # 测试与运行产物
 *.log
 *.csv
-output/
+data/
 
 # 编辑器
 .vscode/

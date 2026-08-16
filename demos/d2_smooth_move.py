@@ -25,12 +25,22 @@ D2 Demo：手搓运动控制层 —— 多关节梯形速度规划平滑运动
 import argparse
 import sys
 import time
+from pathlib import Path
 
-from motion import ArmController
-from protocol import DEFAULT_BAUDRATE, FeetechSerialBus, angle_to_counts, counts_to_angle
+# 把项目根目录加入 sys.path，使 my_arm_control 包可直接导入（无需 pip install）
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from my_arm_control.motion import ArmController  # noqa: E402
+from my_arm_control.protocol import (  # noqa: E402
+    DEFAULT_BAUDRATE,
+    FeetechSerialBus,
+    angle_to_counts,
+    counts_to_angle,
+)
 
 DEFAULT_SERVOS = [1, 2, 3, 4, 5, 6]
 DEFAULT_TARGET = "30,-20,15,-15,10,0"  # 相对角度（度），靠限位兜底安全
+DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "trajectories"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -109,7 +119,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"!! 以下关节目标被安全余量截断: {clamped_hit}")
 
         # 3. 运动
-        log_path = args.log or f"d2_traj_{args.profile}_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+        log_path = args.log or str(DATA_DIR / f"d2_traj_{args.profile}_{time.strftime('%Y%m%d_%H%M%S')}.csv")
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
         print(f"\n开始运动（{args.profile}）... 轨迹日志: {log_path}")
         t0 = time.perf_counter()
         result = ctrl.move_to(

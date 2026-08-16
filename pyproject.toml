@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my-arm-control"
+version = "0.1.0"
+description = "SO-ARM101 手搓机械臂控制：Feetech 串口协议层 + 运动控制层（梯形速度规划/缓动/限幅）"
+requires-python = ">=3.10"
+dependencies = ["pyserial"]
+
+[tool.setuptools.packages.find]
+include = ["my_arm_control*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

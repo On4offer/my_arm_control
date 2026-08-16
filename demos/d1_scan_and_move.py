@@ -23,8 +23,12 @@ D1 Demo：手搓串口协议点亮 SO-ARM101 舵机
 import argparse
 import sys
 import time
+from pathlib import Path
 
-from protocol import (
+# 把项目根目录加入 sys.path，使 my_arm_control 包可直接导入（无需 pip install）
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from my_arm_control.protocol import (  # noqa: E402
     ADDR,
     DEFAULT_BAUDRATE,
     FeetechSerialBus,

@@ -21,11 +21,21 @@ D2 波浪运动 Demo：多关节交替正反向摆动（涟漪效果），用于
 import argparse
 import sys
 import time
+from pathlib import Path
 
-from motion import ArmController
-from protocol import DEFAULT_BAUDRATE, FeetechSerialBus, angle_to_counts, counts_to_angle
+# 把项目根目录加入 sys.path，使 my_arm_control 包可直接导入（无需 pip install）
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from my_arm_control.motion import ArmController  # noqa: E402
+from my_arm_control.protocol import (  # noqa: E402
+    DEFAULT_BAUDRATE,
+    FeetechSerialBus,
+    angle_to_counts,
+    counts_to_angle,
+)
 
 DEFAULT_SERVOS = [1, 2, 3, 4, 5, 6]
+DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "trajectories"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -111,7 +121,8 @@ def main(argv: list[str] | None = None) -> int:
         fwd, bwd = pose(+1.0), pose(-1.0)
 
         # 5. 波浪循环
-        log_prefix = args.log or f"d2_wave_{time.strftime('%Y%m%d_%H%M%S')}"
+        log_prefix = args.log or str(DATA_DIR / f"d2_wave_{time.strftime('%Y%m%d_%H%M%S')}")
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
         print(f"\n开始波浪运动（{args.loops} 次循环）...")
         for loop in range(1, args.loops + 1):
             for name, targets in (("正摆", fwd), ("反摆", bwd)):

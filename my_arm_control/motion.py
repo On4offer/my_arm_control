@@ -21,7 +21,7 @@ import csv
 import math
 import time
 
-from protocol import ADDR, FeetechSerialBus, ProtocolError, decode_sign_magnitude, encode_sign_magnitude
+from .protocol import ADDR, FeetechSerialBus, ProtocolError, decode_sign_magnitude, encode_sign_magnitude
 
 
 # ---------------------------------------------------------------------------

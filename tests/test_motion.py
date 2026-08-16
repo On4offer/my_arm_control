@@ -8,7 +8,13 @@ D2 运动控制层离线单测：无需硬件，验证轨迹规划数学与限�
   pytest test_motion.py
 """
 
-from motion import (
+import sys
+from pathlib import Path
+
+# 把项目根目录加入 sys.path，使 my_arm_control 包可直接导入（无需 pip install）
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from my_arm_control.motion import (
     EaseProfile,
     LinearProfile,
     TrapezoidalProfile,

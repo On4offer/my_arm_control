@@ -1,24 +1,30 @@
-# my_arm_control — 手搓机械臂控制（D1 串口协议层）
+# my_arm_control — 手搓机械臂控制（D1 协议层 + D2 运动控制层）
 
 SO-ARM101（幻尔主从双臂，HX 舵机，兼容 Feetech STS3215）的**完全手搓**控制层。
 
-> GitHub: https://github.com/On4offer/my_arm_control（D1 真机验证通过）
+> GitHub: https://github.com/On4offer/my_arm_control（D1/D2 真机验证通过）
 
-> 定位（见 `../learning_roadmap.md` 阶段 B / Demo D1）：
-> 不依赖 LeRobot / scservo_sdk，仅用 pyserial 从零实现 Feetech 串口协议，
-> 对齐 JD 能力：**工业通信协议（串口）、电机/编码器调试**。
+> 定位（见 `../learning_roadmap.md` 阶段 B / Demo D1-D2）：
+> 不依赖 LeRobot / scservo_sdk，仅用 pyserial 从零实现 Feetech 串口协议与运动控制，
+> 对齐 JD 能力：**工业通信协议（串口）、电机/编码器调试、运动控制**。
 
 ## 目录结构
 
 ```
 my_arm_control/
-├── protocol.py             # 手搓 Feetech 协议层（帧构造/解析/校验/扫描）
-├── motion.py               # 手搓运动控制层（D2）：梯形速度规划/缓动 + 限位限幅 + 多关节下发
-├── d1_scan_and_move.py     # D1 Demo：搜索总线 → 识别 ID → 1 号舵机转 30°
-├── d2_smooth_move.py       # D2 Demo：多关节梯形速度规划平滑运动，记录轨迹 CSV
-├── d2_wave_demo.py         # D2 Demo（录视频用）：多关节交替摆动波浪运动
-├── test_protocol.py        # D1 离线单测（无需硬件）
-└── test_motion.py          # D2 离线单测（无需硬件）
+├── my_arm_control/          # 源码包
+│   ├── protocol.py          #   手搓 Feetech 协议层（帧构造/解析/校验/扫描）
+│   └── motion.py            #   运动控制层：梯形速度规划/缓动 + 限位限幅 + 多关节下发
+├── demos/                   # 可执行 Demo（含 sys.path 引导，可直接运行）
+│   ├── d1_scan_and_move.py  #   D1：搜索总线 → 识别 ID → 1 号舵机转 30°
+│   ├── d2_smooth_move.py    #   D2：多关节梯形速度规划平滑运动，记录轨迹 CSV
+│   └── d2_wave_demo.py      #   D2（录视频用）：多关节交替摆动波浪运动
+├── tests/                   # 离线单测（无需硬件）
+│   ├── test_protocol.py     #   10 项：帧构造/解析/校验/编解码
+│   └── test_motion.py       #   8 项：轨迹规划数学/限幅
+├── data/trajectories/       # 运行中间结果（轨迹 CSV，gitignore）
+├── pyproject.toml           # 可 pip install -e . 打包安装
+└── README.md
 ```
 
 ## 协议要点（对照阅读 LeRobot `src/lerobot/motors/feetech/`）
@@ -39,28 +45,33 @@ my_arm_control/
 ## 用法
 
 ```bash
+cd my_arm_control   # 项目根目录（demos/tests 内已做 sys.path 引导，任意目录也可直接运行）
+
 # 1. 离线单测（无需硬件）
-python test_protocol.py
-python test_motion.py
+python tests/test_protocol.py
+python tests/test_motion.py
+# 或 pytest tests/
 
 # 2. 真机 Demo D1：搜索总线 + 1 号舵机转 30°
-python d1_scan_and_move.py --port COM3
+python demos/d1_scan_and_move.py --port COM3
 
 # 3. 真机 Demo D2：多关节梯形速度规划平滑运动（相对角度，度）
-python d2_smooth_move.py --port COM3 --target "20,10,-20,15,10,10"
-python d2_smooth_move.py --port COM3 --target "20,10,-20,15,10,10" --profile linear --duration-ms 2000
-python d2_smooth_move.py --port COM3 --dry-run          # 只读状态
+python demos/d2_smooth_move.py --port COM3 --target "20,10,-20,15,10,10"
+python demos/d2_smooth_move.py --port COM3 --target "20,10,-20,15,10,10" --profile linear --duration-ms 2000
+python demos/d2_smooth_move.py --port COM3 --dry-run          # 只读状态
 
 # 3b. D2 波浪运动（录视频用）：多关节交替摆动，--center mid 保证 6 关节全幅
-python d2_wave_demo.py --port COM3 --center mid
+python demos/d2_wave_demo.py --port COM3 --center mid
 
 # 4. 自定义：2 号舵机反向转 45°，2 秒平滑（D1）
-python d1_scan_and_move.py --port COM3 --servo 2 --angle -45 --duration-ms 2000
+python demos/d1_scan_and_move.py --port COM3 --servo 2 --angle -45 --duration-ms 2000
 ```
+
+> 可选：`pip install -e .` 后 `import my_arm_control` 可在任意目录使用（demos/tests 已内置路径引导，不装也可跑）。
 
 ## D2 运动控制层
 
-**实现**（`motion.py`，对照 LeRobot v0.6.2）：
+**实现**（`my_arm_control/motion.py`，对照 LeRobot v0.6.2）：
 - `TrapezoidalProfile`：梯形速度规划（加速-匀速-减速三段，距离不足自动退化为三角形剖面）
 - `LinearProfile` / `EaseProfile`：线性插值（对照 `control_utils.follower_smooth_move_to`）/ sine 缓动
 - `clamp_relative`：逐帧增量限幅（对照 `robots/utils.ensure_safe_goal_position` 的 max_relative_target）
