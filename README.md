@@ -2,6 +2,8 @@
 
 SO-ARM101（幻尔主从双臂，HX 舵机，兼容 Feetech STS3215）的**完全手搓**控制层。
 
+> GitHub: https://github.com/On4offer/my_arm_control（D1 真机验证通过）
+
 > 定位（见 `../learning_roadmap.md` 阶段 B / Demo D1）：
 > 不依赖 LeRobot / scservo_sdk，仅用 pyserial 从零实现 Feetech 串口协议，
 > 对齐 JD 能力：**工业通信协议（串口）、电机/编码器调试**。
