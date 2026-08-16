@@ -78,7 +78,13 @@ class ServoDashboard(QMainWindow):
         self.timer.start(POLL_MS)
 
         if port:
-            self.port_combo.setCurrentText(port)
+            # 按真实端口名（data）查找并选中，而非匹配显示文本
+            idx = self.port_combo.findData(port)
+            if idx >= 0:
+                self.port_combo.setCurrentIndex(idx)
+            else:
+                self.port_combo.addItem(port, port)  # 端口不在列表（未刷新）时手动加入
+                self.port_combo.setCurrentIndex(self.port_combo.count() - 1)
             self._connect()
 
     # ------------------------------------------------------------------ UI
