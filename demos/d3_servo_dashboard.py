@@ -298,7 +298,11 @@ class ServoDashboard(QMainWindow):
             return
         profs = {}
         for sid, row in self.servo_rows.items():
-            mid = float(row["lo"] + row["hi"]) / 2.0
+            lo, hi = row["lo"], row["hi"]
+            if not (lo - 50 <= present[sid] <= hi + 50):
+                self._log(f"⚠ ID={sid} 当前位置 {present[sid]} 超出校准限位 [{lo}, {hi}]，"
+                          f"回中会先把该关节拉回限位内（建议重新校准 lerobot-calibrate）")
+            mid = float(lo + hi) / 2.0
             profs[sid] = TrapezoidalProfile(present[sid], mid, HOME_VMAX, HOME_AMAX)
         self._home = {"prof": profs, "t": 0.0, "T": max(p.T for p in profs.values())}
         # 使能所有力矩后开始步进（在 _poll_once 中逐帧下发）
