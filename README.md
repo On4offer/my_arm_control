@@ -16,6 +16,7 @@ my_arm_control/
 ├── motion.py               # 手搓运动控制层（D2）：梯形速度规划/缓动 + 限位限幅 + 多关节下发
 ├── d1_scan_and_move.py     # D1 Demo：搜索总线 → 识别 ID → 1 号舵机转 30°
 ├── d2_smooth_move.py       # D2 Demo：多关节梯形速度规划平滑运动，记录轨迹 CSV
+├── d2_wave_demo.py         # D2 Demo（录视频用）：多关节交替摆动波浪运动
 ├── test_protocol.py        # D1 离线单测（无需硬件）
 └── test_motion.py          # D2 离线单测（无需硬件）
 ```
@@ -49,6 +50,9 @@ python d1_scan_and_move.py --port COM3
 python d2_smooth_move.py --port COM3 --target "20,10,-20,15,10,10"
 python d2_smooth_move.py --port COM3 --target "20,10,-20,15,10,10" --profile linear --duration-ms 2000
 python d2_smooth_move.py --port COM3 --dry-run          # 只读状态
+
+# 3b. D2 波浪运动（录视频用）：多关节交替摆动，--center mid 保证 6 关节全幅
+python d2_wave_demo.py --port COM3 --center mid
 
 # 4. 自定义：2 号舵机反向转 45°，2 秒平滑（D1）
 python d1_scan_and_move.py --port COM3 --servo 2 --angle -45 --duration-ms 2000
