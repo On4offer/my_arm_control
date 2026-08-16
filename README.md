@@ -110,21 +110,25 @@ python demos/d1_scan_and_move.py --port COM3 --servo 2 --angle -45 --duration-ms
 **关节命名**（SO-101，厂商使用文档，从上往下）：`gripper(6) wrist_roll(5) wrist_flex(4) elbow_flex(3) shoulder_lift(2) shoulder_pan(1)`。
 
 **限位以舵机 EEPROM 实测为准**（出厂已校准，读取工具 `demos/dump_joint_limits.py COM22 COM24`）：
-2026-08-16 实测（码值，4096 码=360°）：
+2026-08-16 实测（码值，4096 码=360°），快照见 [`config/so101_joint_limits.json`](./config/so101_joint_limits.json)：
 
 | ID | 关节 | 主臂 COM22 [Min,Max] | 从臂 COM24 [Min,Max] | 备注 |
 |----|------|---------------------|----------------------|------|
-| 1 | shoulder_pan | [0, 4095] | [1663, 4217] | 主臂全量程（未标定） |
+| 1 | shoulder_pan | [0, 4095] | [1663, 4217] | 主臂全量程 |
 | 2 | shoulder_lift | [871, 3254] | [2041, 4420] | 大臂重载，易过载 |
-| 3 | elbow_flex | [467, 4067] | [0, 4095] | 从臂全量程（未标定） |
+| 3 | elbow_flex | [467, 4067] | [0, 4095] | 从臂全量程，物理行程不足 360° 需谨慎 |
 | 4 | wrist_flex | [929, 3128] | [140, 2334] | |
-| 5 | wrist_roll | [304, 4115] | [0, 4095] | 从臂全量程（未标定） |
+| 5 | wrist_roll | [304, 4115] | [0, 4095] | 从臂全量程（真连续旋转） |
 | 6 | gripper | [699, 1934] | [1328, 2441] | |
+
+> 更新方法：`conda run -n lerobot python demos/dump_joint_limits.py COM22 COM24 --json config/so101_joint_limits.json`
+> （运行时以实时 EEPROM 为准；该 JSON 用于离线参考/规划复用）
 
 **安全位置怎么选**：
 - 厂商校准/上电的**初始位置 = 机械臂竖直状态**（使用文档 4.1 校准章节）
 - 我们的「回安全位姿」= 各关节**量程中点**（重力最平衡、距限位最远），在限位可信的前提下是保守安全位姿
 - **重要**：若某关节当前位置超出其校准限位（如主臂 ID2 曾测到 -823 < 下限 871），说明限位与实际物理状态不符——此时应先跑官方 `lerobot-calibrate` 重新校准（臂放竖直初始位），再操作。GUI 回中时会对此类关节给出预警
+- 机械极限由连杆几何决定，**无法程序自动测量**（自动堵转=过载 0x20）；仅换舵机/重装时才需手动校准
 
 ## D1 验收状态
 

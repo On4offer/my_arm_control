@@ -1,0 +1,21 @@
+{
+  "_说明": "SO-101 两臂各关节 EEPROM 限位参考快照（码值，4096码=360°）。来源: demos/dump_joint_limits.py 实测 2026-08-16。运行时请以实时读取 EEPROM 为准；更新方法: conda run -n lerobot python demos/dump_joint_limits.py COM22 COM24 --json config/so101_joint_limits.json",
+  "_关节命名": "从上往下: gripper(6) wrist_roll(5) wrist_flex(4) elbow_flex(3) shoulder_lift(2) shoulder_pan(1)",
+  "_安全提示": "全量程[0,4095]关节中, elbow_flex 物理行程不足360°(连杆会相撞), 操作时务必留余量; shoulder_pan/wrist_roll 为真连续旋转关节。当前两臂 ID2(shoulder_lift) 曾在限位外, 操作前先回安全位姿。",
+  "COM22_主臂": {
+    "1_shoulder_pan":    {"min": 0,    "max": 4095, "range_deg": 359.9, "note": "全量程"},
+    "2_shoulder_lift":   {"min": 871,  "max": 3254, "range_deg": 209.4, "note": "大臂重载易过载"},
+    "3_elbow_flex":      {"min": 467,  "max": 4067, "range_deg": 316.4, "note": ""},
+    "4_wrist_flex":      {"min": 929,  "max": 3128, "range_deg": 193.3, "note": ""},
+    "5_wrist_roll":      {"min": 304,  "max": 4115, "range_deg": 335.0, "note": ""},
+    "6_gripper":         {"min": 699,  "max": 1934, "range_deg": 108.5, "note": "夹爪"}
+  },
+  "COM24_从臂": {
+    "1_shoulder_pan":    {"min": 1663, "max": 4217, "range_deg": 224.5, "note": ""},
+    "2_shoulder_lift":   {"min": 2041, "max": 4420, "range_deg": 209.1, "note": "大臂重载易过载"},
+    "3_elbow_flex":      {"min": 0,    "max": 4095, "range_deg": 359.9, "note": "全量程-物理行程不足, 需谨慎"},
+    "4_wrist_flex":      {"min": 140,  "max": 2334, "range_deg": 192.8, "note": ""},
+    "5_wrist_roll":      {"min": 0,    "max": 4095, "range_deg": 359.9, "note": "全量程-真连续旋转"},
+    "6_gripper":         {"min": 1328, "max": 2441, "range_deg": 97.8,  "note": "夹爪"}
+  }
+}
