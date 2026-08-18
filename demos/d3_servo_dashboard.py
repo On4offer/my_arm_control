@@ -150,10 +150,28 @@ class ServoDashboard(QMainWindow):
         self.log_view.appendPlainText(f"[{time.strftime('%H:%M:%S')}] {msg}")
 
     # ----------------------------------------------------------- 连接管理
+    def _clear_joint_rows(self):
+        """清除关节控制区所有舵机控制行（保留顶部提示 hint，index 0）。
+
+        从后往前删除，避免重连/切换端口时历史控制行累积。
+        """
+        i = self.joint_layout.count() - 1
+        while i > 0:
+            item = self.joint_layout.takeAt(i)
+            sub = item.layout()
+            if sub is not None:
+                while sub.count():
+                    it = sub.takeAt(0)
+                    w = it.widget()
+                    if w is not None:
+                        w.deleteLater()
+                sub.deleteLater()
+            i -= 1
+
     def _connect(self):
         if self.bus is not None:
-            self._log("已连接，请先断开")
-            return
+            self._log("已连接，自动断开旧端口后重新连接")
+            self._disconnect()
         port = self.port_combo.currentData() or self.port_combo.currentText()
         try:
             bus = FeetechSerialBus(port=port, baudrate=DEFAULT_BAUDRATE)
@@ -168,7 +186,7 @@ class ServoDashboard(QMainWindow):
         self.bus = bus
         self._log(f"已连接 {port}，发现 {len(models)} 舵机: {sorted(models)}")
 
-        # 为每个舵机建立状态行 + 控制行
+        # 为每个舵机建立状态行 + 控制行（_disconnect 已清空旧行，这里只追加新行）
         self.servo_rows.clear()
         self.table.setRowCount(0)
         for sid in sorted(models):
@@ -181,6 +199,7 @@ class ServoDashboard(QMainWindow):
             self.bus = None
         self.servo_rows.clear()
         self.table.setRowCount(0)
+        self._clear_joint_rows()
         self._log("已断开")
 
     def _add_servo_row(self, sid: int, model: int):
@@ -305,9 +324,10 @@ class ServoDashboard(QMainWindow):
             mid = float(lo + hi) / 2.0
             profs[sid] = TrapezoidalProfile(present[sid], mid, HOME_VMAX, HOME_AMAX)
         self._home = {"prof": profs, "t": 0.0, "T": max(p.T for p in profs.values())}
-        # 使能所有力矩后开始步进（在 _poll_once 中逐帧下发）
+        # 降低舵机内部加速度（限位外关节拉回更平缓），然后使能所有力矩开始步进
         for sid in self.servo_rows:
             try:
+                self.bus.write_u8(sid, ADDR["acceleration"][0], 100)
                 self.bus.write_u8(sid, ADDR["torque_enable"][0], 1)
             except ProtocolError:
                 pass
@@ -333,7 +353,8 @@ class ServoDashboard(QMainWindow):
         home = self._home
         t = home["t"]
         for sid, prof in home["prof"].items():
-            goal = int(round(prof.position(t)))
+            lo, hi = self.servo_rows[sid]["lo"], self.servo_rows[sid]["hi"]
+            goal = int(round(min(max(prof.position(t), lo), hi)))  # 截断到限位，防 0x10 拒绝
             try:
                 self.bus.write_u16(sid, ADDR["goal_position"][0], encode_sign_magnitude(goal))
             except ProtocolError as e:

@@ -32,8 +32,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from my_arm_control.motion import ArmController  # noqa: E402
 from my_arm_control.protocol import (  # noqa: E402
+    ADDR,
     DEFAULT_BAUDRATE,
     FeetechSerialBus,
+    ProtocolError,
     angle_to_counts,
     counts_to_angle,
 )
@@ -58,6 +60,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--return", action="store_true", help="到达后自动返回起点")
     p.add_argument("--log", default=None, help="轨迹 CSV 输出路径（默认自动生成）")
     p.add_argument("--dry-run", action="store_true", help="只读状态不运动")
+    p.add_argument("--home", action="store_true",
+                   help="回安全位姿：所有关节平滑移到量程中点（重力最平衡，距限位最远）")
     return p.parse_args(argv)
 
 
@@ -104,7 +108,29 @@ def main(argv: list[str] | None = None) -> int:
             print("\n[dry-run] 仅读取状态，未运动。")
             return 0
 
-        # 2. 计算目标（相对角度 → 码值），并留出安全余量防过载（限位 ± safety_margin）
+        # 2a. 回安全位姿：所有关节移到量程中点（跳过相对角度目标）
+        if args.home:
+            targets = {}
+            for sid in servo_ids:
+                lo, hi = limits[sid]
+                if not (lo - 50 <= present[sid] <= hi + 50):
+                    print(f"  ⚠ ID={sid} 当前 {present[sid]} 超出校准限位 [{lo}, {hi}]，正在拉回量程中点")
+                targets[sid] = float(lo + hi) / 2.0
+            # 降低舵机内部加速度，限位外关节拉回时更平缓
+            for sid in servo_ids:
+                try:
+                    bus.write_u8(sid, ADDR["acceleration"][0], 100)
+                except ProtocolError:
+                    pass
+            print(f"\n开始回安全位姿（量程中点）... vmax={args.vmax} 码/s")
+            result = ctrl.move_to(targets, profile="trapezoid", v_max=args.vmax, a_max=args.amax, settle_s=1.0)
+            end = result["end"]
+            for sid in servo_ids:
+                print(f"  ID={sid}: {present[sid]} → {end[sid]}（目标 {int(round(targets[sid]))}）")
+            print("\n回安全位姿完成 ✅")
+            return 0
+
+        # 2b. 计算目标（相对角度 → 码值），并留出安全余量防过载（限位 ± safety_margin）
         margin = args.safety_margin
         targets = {}
         clamped_hit = []

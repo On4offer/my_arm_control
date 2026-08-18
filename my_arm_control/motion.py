@@ -8,7 +8,7 @@
 - robots/so_follower/so_follower.py `send_action` + robots/utils.py `ensure_safe_goal_position`
     —— 每帧写 Goal_Position，并用 max_relative_target 把"本帧增量"限制在 ±max_diff（隐式限速）
 - 位置闭环本身在舵机内部 PID（P/D/I 寄存器 21/22/23）完成
-
++
 本模块的三层结构（对应 D2 任务）：
 1. 轨迹规划：TrapezoidalProfile（梯形速度：加速-匀速-减速）/ LinearProfile / EaseProfile
 2. 安全限幅：目标截断到 Min/Max_Position_Limit + 逐帧增量限幅 clamp_relative（对照 ensure_safe_goal_position）
@@ -182,6 +182,10 @@ class ArmController:
         for sid in self.servo_ids:
             self.bus.write_u8(sid, ADDR["torque_enable"][0], 1)
 
+    def disable_torque(self) -> None:
+        for sid in self.servo_ids:
+            self.bus.write_u8(sid, ADDR["torque_enable"][0], 0)
+
     # ---- 轨迹下发 ----
     def move_to(
         self,
@@ -216,24 +220,24 @@ class ArmController:
         clipped = {}
         for sid in self.servo_ids:
             lo, hi = limits[sid]
-            clipped[sid] = min(max(float(targets[sid]), lo), hi)
+            clipped[sid] = min(max(float(targets.get(sid, present[sid])), lo), hi)
         targets = clipped
 
         # 2) 构造各关节轨迹
         if profile == "trapezoid":
             trajs = {
-                sid: TrapezoidalProfile(present[sid], targets[sid], v_max, a_max) for sid in self.servo_ids
+                sid: TrapezoidalProfile(present[sid], targets.get(sid, present[sid]), v_max, a_max) for sid in self.servo_ids
             }
             T = max(trajs[sid].T for sid in self.servo_ids)
         elif profile == "linear":
             if duration_s is None:
-                duration_s = max(abs(targets[sid] - present[sid]) for sid in self.servo_ids) / v_max
-            trajs = {sid: LinearProfile(present[sid], targets[sid], duration_s) for sid in self.servo_ids}
+                duration_s = max(abs(targets.get(sid, present[sid]) - present[sid]) for sid in self.servo_ids) / v_max
+            trajs = {sid: LinearProfile(present[sid], targets.get(sid, present[sid]), duration_s) for sid in self.servo_ids}
             T = duration_s
         elif profile == "ease":
             if duration_s is None:
-                duration_s = max(abs(targets[sid] - present[sid]) for sid in self.servo_ids) / v_max
-            trajs = {sid: EaseProfile(present[sid], targets[sid], duration_s) for sid in self.servo_ids}
+                duration_s = max(abs(targets.get(sid, present[sid]) - present[sid]) for sid in self.servo_ids) / v_max
+            trajs = {sid: EaseProfile(present[sid], targets.get(sid, present[sid]), duration_s) for sid in self.servo_ids}
             T = duration_s
         else:
             raise ValueError(f"未知 profile: {profile}（可选 trapezoid/linear/ease）")
@@ -250,6 +254,8 @@ class ArmController:
                 q = trajs[sid].position(t)
                 if self.max_step is not None:
                     q = clamp_relative(q, cur[sid], self.max_step)
+                lo, hi = limits[sid]
+                q = min(max(q, lo), hi)  # 目标截断到限位：越限目标会被舵机拒绝(错误位 0x10)
                 goals[sid] = int(round(q))
                 self.bus.write_u16(sid, ADDR["goal_position"][0], encode_sign_magnitude(goals[sid]))
             # 回读实际位置（记录轨迹）
@@ -278,7 +284,7 @@ class ArmController:
                     end = cur
                 except ProtocolError:
                     pass  # 舵机错误位（如过载报警）不中断，位置数据仍可后续重读
-                if all(abs(cur[sid] - targets[sid]) <= settle_tol for sid in self.servo_ids):
+                if all(abs(cur[sid] - targets.get(sid, present[sid])) <= settle_tol for sid in self.servo_ids):
                     break
                 time.sleep(0.05)
 

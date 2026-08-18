@@ -1,0 +1,109 @@
+{
+  "_comment": "D4 视觉抓取闭环配置。角度统一用 LeRobot DEGREES 约定：angle_deg = (raw - mid) * 360 / 4095，mid=(range_min+range_max)/2。数值可依据真机 diag_servo_state.py --probe / d4_calibrate_table 的校验输出调整。",
+  "hardware": {
+    "port": "COM24",
+    "camera_index": 1,
+    "servo_ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "calibration_json": "C:/Users/Lenovo/.cache/huggingface/lerobot/calibration/robots/so_follower/None.json"
+  },
+  "kinematics": {
+    "_comment": "SO-101 平面模型（URDF new_calib 提取）：肩轴在基座 (x0,y0,h0)，平面内 L1=肩→肘, L2=肘→腕, D_tip=腕→指尖(夹爪竖直朝下时)。角度映射：φ2=s2*θ2+o2, φ3=s3*θ3+o3, φ4=s4*θ4+o4；夹爪竖直⟺φ2+φ3+φ4=180°。s/o 需真机校准验证（重投影误差小即正确）。",
+    "shoulder_x": 0.0388,
+    "shoulder_y": 0.0,
+    "shoulder_h": 0.0624,
+    "link1": 0.1776,
+    "link2": 0.135,
+    "wrist_to_tip": 0.098,
+    "sign": {
+      "shoulder_pan": 1.0,
+      "shoulder_lift": 1.0,
+      "elbow_flex": 1.0,
+      "wrist_flex": 1.0
+    },
+    "wrist_roll_sign": -1.0,
+    "offset_deg": {
+      "shoulder_pan": 0.0,
+      "shoulder_lift": 19.3,
+      "elbow_flex": 68.5,
+      "wrist_flex": 5.0
+    },
+    "elbow_branch": "up"
+  },
+  "table": {
+    "_comment": "标定/抓取平面。机械臂尾部贴桌边、夹爪朝内：工作区在机械臂【前方桌面】。z_safe_min 为防撞硬约束（任何低于该值的 z 目标被 IK 拒绝）；数值先由 d4_probe_z.py 探高校准后写入，探高前不要跑任何低 z 操作。",
+    "z_touch": 0.08,
+    "z_grasp": 0.074,
+    "z_lift": 0.1405,
+    "z_pre": 0.12,
+    "z_safe_min": 0.0705,
+    "grid": {
+      "x_start": 0.08,
+      "x_stop": 0.14,
+      "nx": 3,
+      "y_start": -0.04,
+      "y_stop": 0.04,
+      "ny": 3
+    },
+    "max_reach": 0.3
+  },
+  "target_detect": {
+    "_comment": "目标颜色分割（HSV）。hsv 为 [H_min,H_max,S_min,S_max,V_min,V_max]。area_range 过滤噪点/过大区域。",
+    "hsv": [
+      111,
+      118,
+      45,
+      212,
+      90,
+      255
+    ],
+    "area_range": [
+      600,
+      120000
+    ],
+    "max_targets": 1
+  },
+  "gripper": {
+    "_comment": "夹爪开合码值（从臂 EEPROM 限位 [1560,2426] 内取，真机实测校准）。0 = 夹紧, 100 = 张开（LeRobot RANGE_0_100 语义）。open 不用 100：张到最大顶机械挡块会触发过载报警 0x20（锁存，读写全失败，D4 实测卡死），90 足够让盒子进入夹爪。夹爪软过载配置（Max_Torque_Limit/Protection_Current/Overload_Torque）由 grasp.py 启动时按 LeRobot 值写入，堵转只降扭矩不锁存。标定时点【活动爪尖点】：half_span=活动爪尖到夹爪中心的横向距离（米，最大张开约 0.03，真机量一下）；jaw_side=活动爪在机械臂局部坐标的侧向（±1，标定 rms_mm 异常时切换符号重标）。",
+    "open": 90,
+    "close": 15,
+    "verify_delta_codes": 120,
+    "half_span": 0.05,
+    "jaw_side": 1,
+    "grip_offset_deg": 204.0
+  },
+  "motion": {
+    "v_max": 200.0,
+    "a_max": 400.0,
+    "grasp_v_max": 120.0,
+    "grasp_a_max": 240.0,
+    "settle_s": 1.0,
+    "move_timeout_s": 20.0,
+    "serial_retries": 3
+  },
+  "grasp_loop": {
+    "n_trials": 5,
+    "max_retries": 2,
+    "detect_timeout_s": 10.0,
+    "random_place": true,
+    "_comment": "place_xy：放置点（基座 XY 米），抓取成功后把物品放这里再松开；应选在工作区外/不挡目标的位置",
+    "place_xy": [
+      0.06,
+      0.1
+    ]
+  },
+  "safe_pose": {
+    "shoulder_pan": 104.3,
+    "shoulder_lift": -4.6,
+    "elbow_flex": 14.8,
+    "wrist_flex": 31.5,
+    "wrist_roll": -0.5,
+    "gripper": 5.6
+  }
+}

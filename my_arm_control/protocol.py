@@ -238,6 +238,20 @@ class FeetechSerialBus:
     def read_u16(self, servo_id: int, address: int) -> int:
         return join_u16(*self.read_register(servo_id, address, 2))
 
+    def read_u16_soft(self, servo_id: int, address: int) -> tuple[int, int]:
+        """读 16 位寄存器并返回 (值, 错误位)。错误位**不抛异常**。
+
+        用于夹爪过载检测：夹爪堵在物体/挡块上会置过载错误位 0x20（堵转=咬住
+        物体，是正常抓取状态），但普通 read_register 会把任何错误位当致命错误。
+        """
+        self._tx(build_instruction_packet(servo_id, INST_READ, [address, 2]))
+        status = self._rx_status(expected_id=servo_id)
+        if len(status.params) != 2:
+            raise ProtocolError(
+                f"舵机 {servo_id} 读 @0x{address:02X} 数据长度不符: 期望 2, 实际 {len(status.params)}"
+            )
+        return join_u16(*status.params), status.error
+
     def read_u8(self, servo_id: int, address: int) -> int:
         return self.read_register(servo_id, address, 1)[0]
 
